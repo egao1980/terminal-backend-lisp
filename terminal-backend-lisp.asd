@@ -1,9 +1,9 @@
 (defsystem "terminal-backend-lisp"
-  :version "0.1.0"
+  :version "0.2.0"
   :description "Pure Common Lisp terminal-protocol backend (VT core subset)"
   :author "egao1980"
   :license "MIT"
-  :depends-on ("terminal-protocol")
+  :depends-on ((:version "terminal-protocol" "0.2.0"))
   :serial t
   :pathname "src"
   :components ((:file "package")
@@ -15,6 +15,7 @@
                (:file "sgr")
                (:file "modes")
                (:file "control")
+               (:file "kitty")
                (:file "parser")
                (:file "state")
                (:file "frame")
@@ -28,6 +29,7 @@
   :serial t
   :components ((:file "package")
                (:file "unit-test")
+               (:file "kitty-test")
                (:file "parity-test"))
   :perform (test-op (o c)
              (unless (symbol-call :rove :run c)

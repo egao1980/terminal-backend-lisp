@@ -45,6 +45,7 @@
     (ok (tp:backend-supports-p b :alternate-screen))
     (ok (tp:backend-supports-p b :osc-52))
     (ng (tp:backend-supports-p b :kitty-keyboard))
+    (ng (tp:backend-supports-p b :kitty-zlib))
     (ng (tp:backend-supports-p b :osc-133))
     (ng (tp:backend-supports-p b :format-html))))
 

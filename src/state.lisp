@@ -47,8 +47,24 @@ replacement value."
   (setf (%primary term) nil
         (%alternate term) nil
         (%scrollback term) nil
+        (%kitty term) nil
         (%parser term) nil)
   nil)
+
+;;; ------------------------------------------------------------------
+;;; Images (Kitty graphics; kitty.lisp)
+
+(defmethod tp:terminal-image ((term lisp-terminal) image-id)
+  (loop until (typep image-id '(integer 0))
+        do (setf image-id (%invalid-argument 'image-id image-id term)))
+  (let* ((store (%kitty term))
+         (image (and store (gethash image-id (%ks-images store)))))
+    (and image
+         (tp:make-terminal-image :id (tp:terminal-image-id image)
+                                 :width (tp:terminal-image-width image)
+                                 :height (tp:terminal-image-height image)
+                                 :format (tp:terminal-image-format image)
+                                 :pixels (copy-seq (tp:terminal-image-pixels image))))))
 
 ;;; ------------------------------------------------------------------
 ;;; Resize (no reflow)
@@ -100,8 +116,19 @@ replacement value."
         (setf (saved-cursor-x saved) (min (saved-cursor-x saved) (1- cols))
               (saved-cursor-y saved) (min (saved-cursor-y saved) (1- rows)))))))
 
+(defun %pixel-arg (name value term)
+  "NIL (keep the current size) or a non-negative integer, via USE-VALUE."
+  (loop until (typep value '(or null (integer 0)))
+        do (setf value (%invalid-argument name value term)))
+  value)
+
 (defmethod tp:terminal-resize ((term lisp-terminal) cols rows &key cell-width-px cell-height-px)
-  (declare (ignore cell-width-px cell-height-px))
+  ;; The cell pixel size is stored even when COLS × ROWS do not change: a
+  ;; host may resize to the same grid only to report it.
+  (let ((w (%pixel-arg 'cell-width-px cell-width-px term))
+        (h (%pixel-arg 'cell-height-px cell-height-px term)))
+    (when w (setf (%cell-width-px term) w))
+    (when h (setf (%cell-height-px term) h)))
   (unless (and (= cols (%cols term)) (= rows (%rows term)))
     (%resize-screen term (%primary term) cols rows t)
     (%resize-screen term (%alternate term) cols rows nil)

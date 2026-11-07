@@ -4,6 +4,13 @@
 ;;; pen, erase blank, replies, index / reverse index, scrollback, viewport
 ;;; mapping and full reset.
 
+(defstruct (kitty-store (:conc-name %ks-))
+  "Kitty graphics state of one terminal. Replaced whole by a full reset."
+  (images (make-hash-table) :type hash-table)  ; id → TP:TERMINAL-IMAGE (owned, never handed out)
+  (placements (make-array 4 :adjustable t :fill-pointer 0)) ; (screen . TP:IMAGE-PLACEMENT), oldest first
+  (pending nil)                                ; (governing-keys . adjustable base64 string) or NIL
+  (next-id 1 :type (integer 1)))               ; for transmits without i
+
 (defstruct parser
   (state :ground :type keyword)
   (params (make-array 8 :adjustable t :fill-pointer 0)) ; of lists (p sub…); NIL = empty
@@ -14,6 +21,7 @@
   (intermediates '() :type list)    ; characters 0x20-0x2F, reversed
   (osc (make-array 64 :element-type '(unsigned-byte 8) :adjustable t :fill-pointer 0))
   (osc-overflow nil :type boolean)
+  (string-kind :osc :type (member :osc :apc)) ; what the OSC collector is gathering
   (utf8-code 0 :type fixnum)
   (utf8-need 0 :type fixnum)
   (utf8-min 0 :type fixnum))
@@ -41,6 +49,9 @@
    (epoch :initform 0 :accessor %epoch)                ; bumped ⇒ frames go :full
    (last-char :initform nil :accessor %last-char)      ; for REP
    (style-memo :initform (cons nil nil) :accessor %style-memo)
+   (cell-width-px :initform 0 :accessor %cell-width-px)   ; geometry: survives reset
+   (cell-height-px :initform 0 :accessor %cell-height-px)
+   (kitty :initform nil :accessor %kitty)              ; KITTY-STORE (kitty.lisp)
    (parser :initform (make-parser) :accessor %parser))
   (:documentation "A headless VT emulator written in portable Common Lisp."))
 
@@ -176,7 +187,9 @@ primary screen feeds scrollback."
           (%cursor-style term) :block
           (%palette term) (copy-seq (%initial-palette term))
           (%last-char term) nil
-          (%style-memo term) (cons nil nil))
+          (%style-memo term) (cons nil nil)
+          ;; Images, placements and any pending upload go; cell pixels stay.
+          (%kitty term) (make-kitty-store))
     (%default-modes term)
     (%bump-epoch term)
     term))
