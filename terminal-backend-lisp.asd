@@ -7,6 +7,18 @@
   :serial t
   :pathname "src"
   :components ((:file "package")
+               (:file "palette")
+               (:file "width")
+               (:file "codec")
+               (:file "grid")
+               (:file "terminal")
+               (:file "sgr")
+               (:file "modes")
+               (:file "control")
+               (:file "parser")
+               (:file "state")
+               (:file "frame")
+               (:file "input")
                (:file "backend"))
   :in-order-to ((test-op (test-op "terminal-backend-lisp/tests"))))
 
