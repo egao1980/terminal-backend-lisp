@@ -4,7 +4,7 @@ Pure Common Lisp [`terminal-protocol`](https://github.com/egao1980/terminal-prot
 
 Passes all 98 parity fixtures (fed whole and byte by byte) plus 13 unit tests.
 
-Features: `:scrollback :alternate-screen :osc-52 :format-vt`. It is not ghostty: no reflow when columns change, SU/SD and ED 2 never add to scrollback, invalid UTF-8 becomes U+FFFD, and 8-bit C1 bytes are not controls.
+Features: `:scrollback :alternate-screen :osc-52 :format-vt :kitty-graphics`. Kitty graphics covers raw RGB/RGBA pixels sent directly (`t=d`). Compressed (`o=z`), PNG and file payloads get an `EINVAL` reply, so `:kitty-zlib` is not claimed. It is not ghostty: no reflow when columns change, SU/SD and ED 2 never add to scrollback, invalid UTF-8 becomes U+FFFD, and 8-bit C1 bytes are not controls.
 
 ## License
 

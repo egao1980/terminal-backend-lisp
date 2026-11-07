@@ -16,7 +16,8 @@
    (epoch :initform -1 :accessor %frame-epoch)
    (dirty :initform :none :accessor %frame-dirty) ; accumulated until mark-clean
    (cursor :initform nil :accessor %frame-cursor)
-   (colors :initform nil :accessor %frame-colors)))
+   (colors :initform nil :accessor %frame-colors)
+   (images :initform '() :accessor %frame-images))) ; tp:image-placement, drawing order
 
 (defmethod tp:make-frame ((term lisp-terminal))
   (make-instance 'lisp-frame :terminal term))
@@ -64,6 +65,32 @@
                            :cursor (%cursor-color term)
                            :palette (copy-seq (%palette term))))
 
+(defun %layer-rank (layer)
+  (ecase layer (:below-background 0) (:below-text 1) (:above-text 2)))
+
+(defun %visible-placements (term)
+  "Fresh placements of the active screen that touch the viewport, in viewport
+coordinates and drawing order: layer, then z, then insertion order."
+  (let ((store (%kitty term))
+        (offset (%viewport-offset term))
+        (rows (%rows term))
+        (out '()))
+    (when store
+      (loop for (screen . pl) across (%ks-placements store)
+            for vy = (+ (tp:image-placement-y pl) offset)
+            when (and (eq screen (%active-name term))
+                      (< vy rows) (plusp (+ vy (tp:image-placement-rows pl))))
+              do (let ((copy (copy-structure pl)))
+                   (setf (tp:image-placement-y copy) vy)
+                   (push copy out))))
+    (stable-sort (nreverse out)
+                 (lambda (a b)
+                   (let ((ra (%layer-rank (tp:image-placement-layer a)))
+                         (rb (%layer-rank (tp:image-placement-layer b))))
+                     (or (< ra rb)
+                         (and (= ra rb)
+                              (< (tp:image-placement-z a) (tp:image-placement-z b)))))))))
+
 (defmethod tp:frame-update ((frame lisp-frame))
   (let* ((term (tp:frame-terminal frame))
          (cols (%cols term))
@@ -97,7 +124,8 @@
                   (svref versions y) (line-version line)
                   changed t)))))
     (setf (%frame-cursor frame) (%viewport-cursor term)
-          (%frame-colors frame) (%terminal-colors term))
+          (%frame-colors frame) (%terminal-colors term)
+          (%frame-images frame) (%visible-placements term))
     ;; Like libghostty-vt's render state, dirtiness accumulates until
     ;; FRAME-MARK-CLEAN: :NONE < :PARTIAL < :FULL.
     (setf (%frame-dirty frame)
@@ -118,6 +146,10 @@
                                     :background (tp:terminal-colors-background c)
                                     :cursor (tp:terminal-colors-cursor c)
                                     :palette (copy-seq (tp:terminal-colors-palette c))))))
+
+(defmethod tp:frame-images ((frame lisp-frame))
+  ;; Captured by FRAME-UPDATE; fresh copies each call.
+  (mapcar #'copy-structure (%frame-images frame)))
 
 (defmethod tp:frame-row ((frame lisp-frame) y)
   (let ((rows (%frame-rows frame)))

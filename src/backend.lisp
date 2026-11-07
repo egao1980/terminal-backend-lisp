@@ -6,7 +6,8 @@
 (defclass lisp-backend (tp:terminal-backend) ()
   (:documentation "Pure Common Lisp terminal-protocol backend."))
 
-(defparameter +supported-features+ '(:scrollback :alternate-screen :osc-52 :format-vt))
+(defparameter +supported-features+ '(:scrollback :alternate-screen :osc-52 :format-vt
+                                       :kitty-graphics))
 
 (defmethod tp:backend-supports-p ((backend lisp-backend) feature)
   (and (member feature +supported-features+) t))

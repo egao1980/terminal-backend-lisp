@@ -9,6 +9,12 @@
 ;;; :csi-intermediate :csi-ignore :osc-string :osc-esc :string-ignore
 ;;; :string-esc.
 ;;;
+;;; APC (ESC _) reuses the OSC collector: PARSER-STRING-KIND tells the two
+;;; apart. An APC ends with ST or BEL like an OSC, but ESC followed by any
+;;; other byte aborts it instead of dispatching, so a half-received graphics
+;;; command never runs. Over +MAX-OSC-BYTES+ the bytes are dropped and the
+;;; overflow flag set; %APC-DISPATCH refuses such a command.
+;;;
 ;;; Before an action that can reach the host runs, the next state is already
 ;;; committed, so a non-local exit from a host method leaves a consistent parser.
 
@@ -26,6 +32,7 @@
         (parser-intermediates p) '()
         (fill-pointer (parser-osc p)) 0
         (parser-osc-overflow p) nil
+        (parser-string-kind p) :osc
         (parser-utf8-need p) 0))
 
 (defun %csi-begin (p)
@@ -94,6 +101,12 @@
                   (parser-utf8-min p) minimum)
             (%print term #xFFFD)))))
 
+(defun %string-dispatch (term terminator)
+  "Run the OSC or APC just collected. The parser is already in :GROUND."
+  (if (eq (parser-string-kind (%parser term)) :apc)
+      (%apc-dispatch term)
+      (%osc-dispatch term terminator)))
+
 (defun %feed-byte (term b)
   (declare (type (unsigned-byte 8) b))
   (let ((p (%parser term)))
@@ -124,11 +137,12 @@
                 (push (code-char b) (parser-intermediates p))
                 (setf (parser-state p) :escape-intermediate))
                ((= b #x5B) (%csi-begin p))
-               ((= b #x5D)
+               ((member b '(#x5D #x5F))   ; OSC, APC: collected
                 (setf (fill-pointer (parser-osc p)) 0
                       (parser-osc-overflow p) nil
+                      (parser-string-kind p) (if (= b #x5D) :osc :apc)
                       (parser-state p) :osc-string))
-               ((member b '(#x50 #x58 #x5E #x5F)) ; DCS SOS PM APC: swallowed
+               ((member b '(#x50 #x58 #x5E)) ; DCS SOS PM: swallowed
                 (setf (parser-state p) :string-ignore))
                ((<= #x30 b #x7E)
                 (setf (parser-state p) :ground)
@@ -156,7 +170,7 @@
         (:osc-string
          (cond ((= b 7)
                 (setf (parser-state p) :ground)
-                (%osc-dispatch term :bel))
+                (%string-dispatch term :bel))
                ((= b #x1B) (setf (parser-state p) :osc-esc))
                ((member b '(#x18 #x1A)) (setf (parser-state p) :ground))
                ((< b #x20) nil)
@@ -165,7 +179,8 @@
                (t (vector-push-extend b (parser-osc p)))))
         (:osc-esc
          (setf (parser-state p) :ground)
-         (%osc-dispatch term :st)
+         (when (or (= b #x5C) (eq (parser-string-kind p) :osc))
+           (%string-dispatch term :st))
          (unless (= b #x5C)
            ;; ESC ended the OSC and starts a new sequence with this byte.
            (setf (parser-state p) :escape (parser-intermediates p) '())
